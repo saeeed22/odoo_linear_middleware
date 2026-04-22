@@ -1,0 +1,60 @@
+# Local-development Compose file — host-machine Postgres variant.
+#
+# Use this when you already have Postgres running on your host and you don't
+# want Compose to manage the DB. app, worker, and redis run inside Compose;
+# DATABASE_URL is taken from .env (typically pointing at host.docker.internal
+# on Windows/macOS, or the host bridge gateway on Linux).
+#
+# Usage:
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# For the canonical stack (Postgres inside Compose) use docker-compose.yml.
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - .env
+    # Bind-mount the source tree so edits on the host trigger `tsx watch`
+    # hot-reload inside the container, and so Prisma artefacts generated via
+    # `docker compose exec app ...` land on the host. The anonymous volume on
+    # /app/node_modules prevents the host's (potentially Windows-built)
+    # node_modules from shadowing the Linux node_modules produced by `npm ci`
+    # during image build.
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - redis
+    command: npm run dev
+
+  worker:
+    build: .
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - redis
+    command: npm run worker
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+volumes:
+  redisdata:

@@ -1,3 +1,16 @@
+# Canonical Compose file — full stack with Postgres inside Compose.
+#
+# This is the default for deployments, CI, and any machine that doesn't
+# already have Postgres installed. It brings up app, worker, redis, and a
+# containerised postgres with a persistent named volume and a health check.
+#
+# Usage:
+#   docker compose up -d --build
+#
+# If you prefer running against Postgres on your host machine (DATABASE_URL
+# from .env pointing at host.docker.internal), use docker-compose.local.yml:
+#   docker compose -f docker-compose.local.yml up -d --build
+
 services:
   app:
     build: .
@@ -5,32 +18,48 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db?schema=linear
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
       - .env
+    # Bind-mount the source tree so edits on the host trigger `tsx watch`
+    # hot-reload inside the container, and so Prisma artefacts generated via
+    # `docker compose exec app ...` land on the host. The anonymous volume on
+    # /app/node_modules prevents the host's (potentially Windows-built)
+    # node_modules from shadowing the Linux node_modules produced by `npm ci`
+    # during image build.
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     command: npm run dev
 
   worker:
     build: .
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db?schema=linear
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
       - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     command: npm run worker
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     ports:
       - "5432:5432"
     environment:
@@ -39,6 +68,12 @@ services:
       - POSTGRES_DB=middleware_db
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d middleware_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine

@@ -5,6 +5,17 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "worker": "tsx watch src/worker.ts",
+    "start": "tsx src/index.ts",
+    "start:worker": "tsx src/worker.ts",
+    "typecheck": "npx tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:smoke": "tsx scripts/smoke-db.ts",
+    "queue:smoke": "tsx scripts/smoke-queue.ts",
+    "queue:drain-failed": "tsx scripts/queue-drain-failed.ts",
+    "linear:find": "tsx scripts/find-linear-issue.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

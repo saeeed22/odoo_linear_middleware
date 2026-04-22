@@ -1,0 +1,33 @@
+# Keep host-built artefacts out of the Linux image.
+# node_modules is platform-specific (esp. native deps); always reinstall inside the image.
+node_modules
+npm-debug.log*
+
+# Build output
+dist
+build
+
+# VCS / env
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Logs & debug
+logs
+*.log
+debug-analysis.xml
+bugs.md
+current_odoo_errors.md
+
+# Docker meta (not needed inside the image)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["linear"]
 }
 
 model TicketMapping {
@@ -21,6 +22,7 @@ model TicketMapping {
   updated_at      DateTime  @default(now()) @updatedAt
 
   @@index([linear_id, odoo_id], name: "idx_ticket_mapping_linear_odoo")
+  @@schema("linear")
 }
 
 model IdempotencyKey {
@@ -28,6 +30,8 @@ model IdempotencyKey {
   event_key    String    @unique @db.VarChar(255)
   source       String    @db.VarChar(20)
   processed_at DateTime  @default(now())
+
+  @@schema("linear")
 }
 
 model SyncLog {
@@ -40,20 +44,23 @@ model SyncLog {
   duration_ms    Int?
   correlation_id String?   @db.VarChar(50)
   created_at     DateTime  @default(now())
+
+  @@schema("linear")
 }
 
 model UserMapping {
   id              Int       @id @default(autoincrement())
-  linear_email    String    @unique @db.VarChar(255)  // Email is more intuitive than ID
+  linear_email    String    @unique @db.VarChar(255)
   odoo_email      String    @unique @db.VarChar(255)
-  linear_user_id  String?   @db.VarChar(50)            // Optional: store ID for reference
-  odoo_user_id    Int?                                 // Optional: cached user ID
+  linear_user_id  String?   @db.VarChar(50)
+  odoo_user_id    Int?
   display_name    String?   @db.VarChar(255)
   created_at      DateTime  @default(now())
   updated_at      DateTime  @default(now()) @updatedAt
 
   @@index([linear_email], name: "idx_user_mapping_linear_email")
   @@index([odoo_email], name: "idx_user_mapping_odoo_email")
+  @@schema("linear")
 }
 
 model CommentMapping {
@@ -64,6 +71,7 @@ model CommentMapping {
   created_at         DateTime  @default(now())
 
   @@index([ticket_mapping_id], name: "idx_comment_mapping_ticket")
+  @@schema("linear")
 }
 
 model LabelMapping {
@@ -74,4 +82,5 @@ model LabelMapping {
 
   @@unique([linear_label_name, odoo_tag_id])
   @@index([linear_label_name], name: "idx_label_mapping_name")
+  @@schema("linear")
 }

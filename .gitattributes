@@ -1,0 +1,5 @@
+# Enforce LF line endings for files that are executed in Linux containers.
+# Without this, Windows hosts commit CRLF and break shell interpreters
+# (symptom: `exec ...: no such file or directory` at container start).
+*.sh        text eol=lf
+Dockerfile  text eol=lf
