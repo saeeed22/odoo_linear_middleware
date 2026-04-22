@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TicketMapping {
+  id              Int       @id @default(autoincrement())
+  linear_id       String    @unique @db.VarChar(50)
+  odoo_id         Int       @unique
+  last_synced_at  DateTime
+  last_checksum   String    @db.VarChar(64)
+  sync_status     String    @default("success") @db.VarChar(20)
+  sync_direction  String?   @db.VarChar(20)
+  retry_count     Int       @default(0)
+  error_message   String?   @db.Text
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
+
+  @@index([linear_id, odoo_id], name: "idx_ticket_mapping_linear_odoo")
+}
+
+model IdempotencyKey {
+  id           Int       @id @default(autoincrement())
+  event_key    String    @unique @db.VarChar(255)
+  source       String    @db.VarChar(20)
+  processed_at DateTime  @default(now())
+}
+
+model SyncLog {
+  id             Int       @id @default(autoincrement())
+  event_type     String    @db.VarChar(50)
+  source         String    @db.VarChar(20)
+  payload        Json?
+  status         String    @db.VarChar(20)
+  error_message  String?   @db.Text
+  duration_ms    Int?
+  correlation_id String?   @db.VarChar(50)
+  created_at     DateTime  @default(now())
+}
+
+model UserMapping {
+  id              Int       @id @default(autoincrement())
+  linear_email    String    @unique @db.VarChar(255)  // Email is more intuitive than ID
+  odoo_email      String    @unique @db.VarChar(255)
+  linear_user_id  String?   @db.VarChar(50)            // Optional: store ID for reference
+  odoo_user_id    Int?                                 // Optional: cached user ID
+  display_name    String?   @db.VarChar(255)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now()) @updatedAt
+
+  @@index([linear_email], name: "idx_user_mapping_linear_email")
+  @@index([odoo_email], name: "idx_user_mapping_odoo_email")
+}
+
+model CommentMapping {
+  id                 Int       @id @default(autoincrement())
+  linear_comment_id  String    @unique @db.VarChar(50)
+  odoo_message_id    Int       @unique
+  ticket_mapping_id  Int       @db.Integer
+  created_at         DateTime  @default(now())
+
+  @@index([ticket_mapping_id], name: "idx_comment_mapping_ticket")
+}
+
+model LabelMapping {
+  id                 Int       @id @default(autoincrement())
+  linear_label_name  String    @db.VarChar(100)
+  odoo_tag_id        Int
+  created_at         DateTime  @default(now())
+
+  @@unique([linear_label_name, odoo_tag_id])
+  @@index([linear_label_name], name: "idx_label_mapping_name")
+}
