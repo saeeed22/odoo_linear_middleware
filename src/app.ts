@@ -141,19 +141,10 @@ app.get('/metrics', (req, res) => {
 
 app.post('/webhooks/linear', async (req: any, res: any) => {
   const signature = req.headers['linear-signature'] as string;
-  const timestampHeader = req.headers['linear-delivery-timestamp'] as string;
 
-  if (!signature || !timestampHeader) {
-    logger.warn('Missing signature or timestamp headers');
-    return res.status(401).send('Missing headers');
-  }
-
-  // Verify Timestamp (5 minute tolerance)
-  const timestamp = Number(timestampHeader);
-  const timeDiff = Math.abs(Date.now() - timestamp);
-  if (timeDiff > 5 * 60 * 1000) {
-    logger.warn({ timeDiff }, 'Stale event rejected');
-    return res.status(401).send('Stale event');
+  if (!signature) {
+    logger.warn('Missing linear-signature header');
+    return res.status(401).send('Missing signature header');
   }
 
   // Verify Signature
@@ -175,6 +166,16 @@ app.post('/webhooks/linear', async (req: any, res: any) => {
   if (!signatureValid) {
     logger.warn('Invalid signature');
     return res.status(401).send('Invalid signature');
+  }
+
+  // Replay-attack guard using webhookTimestamp from the payload body (5 minute tolerance)
+  const webhookTimestamp = req.body?.webhookTimestamp;
+  if (webhookTimestamp) {
+    const timeDiff = Math.abs(Date.now() - webhookTimestamp);
+    if (timeDiff > 5 * 60 * 1000) {
+      logger.warn({ timeDiff }, 'Stale event rejected');
+      return res.status(401).send('Stale event');
+    }
   }
 
   try {

@@ -29,6 +29,6 @@ Thumbs.db
 *.swo
 
 # Debug / temp files
-debug-analysis.xml
+
 bugs.md
 current_odoo_errors.md

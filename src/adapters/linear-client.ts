@@ -38,7 +38,7 @@ export async function getIssueComments(issueId: string) {
  * Update a Linear issue assignee
  */
 export async function updateIssueAssignee(issueId: string, userId: string | null) {
-  return linearClient.issueUpdate(issueId, {
+  return linearClient.updateIssue(issueId, {
     assigneeId: userId,
   });
 }
@@ -47,7 +47,7 @@ export async function updateIssueAssignee(issueId: string, userId: string | null
  * Set labels on a Linear issue (replaces all existing labels)
  */
 export async function setIssueLabels(issueId: string, labelIds: string[]) {
-  return linearClient.issueUpdate(issueId, {
+  return linearClient.updateIssue(issueId, {
     labelIds,
   });
 }
