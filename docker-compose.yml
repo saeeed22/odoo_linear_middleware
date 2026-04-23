@@ -4,63 +4,92 @@
 # already have Postgres installed. It brings up app, worker, redis, and a
 # containerised postgres with a persistent named volume and a health check.
 #
+# Production posture:
+#   - Builds the multi-stage Dockerfile's `runtime` target: compiled JS only,
+#     dev dependencies pruned, no bind mount of host source.
+#   - Runs the compiled entrypoints directly (node dist/…), so a fatal crash
+#     exits the process and `restart: unless-stopped` recycles the container.
+#     (Contrast with `tsx watch`, which keeps PID 1 alive after child death.)
+#   - App container healthcheck probes /health; `docker compose up --wait`
+#     only returns success once the app is genuinely serving traffic.
+#
 # Usage:
 #   docker compose up -d --build
 #
-# If you prefer running against Postgres on your host machine (DATABASE_URL
-# from .env pointing at host.docker.internal), use docker-compose.local.yml:
+# For local development with hot-reload against Postgres on your host, use
+# docker-compose.local.yml instead:
 #   docker compose -f docker-compose.local.yml up -d --build
 
 services:
   app:
-    build: .
-    # Publish on host 3010 because 3000 is taken on the staging server. The
-    # app still listens on 3000 INSIDE the container — PORT env stays default.
+    build:
+      context: .
+      target: runtime
+    # Publish on host 3010 because 3000 is taken on the staging server. Inside
+    # the container Express always listens on 3000 — see the PORT pin below.
     ports:
       - "3010:3000"
+    # PORT and NODE_ENV are pinned here (not left to .env) so the
+    # container-internal listen port can never drift from the right-hand side
+    # of the `ports:` mapping above, and so the staging .env can't accidentally
+    # flip the app into development mode. `environment:` is evaluated after
+    # `env_file:`, so these always win over any value set in .env.
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
+      - PORT=3000
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db?schema=linear
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
       - .env
-    # Bind-mount the source tree so edits on the host trigger `tsx watch`
-    # hot-reload inside the container, and so Prisma artefacts generated via
-    # `docker compose exec app ...` land on the host. The anonymous volume on
-    # /app/node_modules prevents the host's (potentially Windows-built)
-    # node_modules from shadowing the Linux node_modules produced by `npm ci`
-    # during image build.
-    volumes:
-      - .:/app
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-    command: npm run dev
+    restart: unless-stopped
+    # Container-level healthcheck. Docker marks the container `unhealthy` if
+    # /health stops returning 200; combined with `restart: unless-stopped`,
+    # the container is recycled automatically. Also makes
+    # `docker compose up --wait` wait for real readiness during deploys.
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get({host:'127.0.0.1',port:process.env.PORT||3000,path:'/health',timeout:4000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    command: ["node", "dist/index.js"]
 
   worker:
-    build: .
+    build:
+      context: .
+      target: runtime
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db?schema=linear
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     env_file:
       - .env
-    volumes:
-      - .:/app
-      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-    command: npm run worker
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
 
   postgres:
+    # Pinned to 17-alpine (not 18) because postgres:18's Docker image changed
+    # its expected mount path from /var/lib/postgresql/data to
+    # /var/lib/postgresql (with data under a major-version subdir), which
+    # would require wiping and re-initialising the pgdata volume. 17 is
+    # supported through Nov 2029 and still receives patch releases via this
+    # tag, so this is stability, not stagnation.
     image: postgres:17-alpine
     ports:
       - "5432:5432"
@@ -76,6 +105,7 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -83,6 +113,7 @@ services:
       - "6379:6379"
     volumes:
       - redisdata:/data
+    restart: unless-stopped
 
 volumes:
   pgdata:

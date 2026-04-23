@@ -12,7 +12,12 @@
 
 services:
   app:
-    build: .
+    # Build the Dockerfile's `dev` stage — same base image and dependency
+    # tree as `runtime`, but keeps dev dependencies (tsx, typescript) so the
+    # bind-mounted source can be executed directly via `tsx watch`.
+    build:
+      context: .
+      target: dev
     ports:
       - "3000:3000"
     environment:
@@ -35,7 +40,9 @@ services:
     command: npm run dev
 
   worker:
-    build: .
+    build:
+      context: .
+      target: dev
     environment:
       - NODE_ENV=development
       - REDIS_HOST=redis
