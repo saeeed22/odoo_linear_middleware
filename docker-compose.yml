@@ -14,8 +14,10 @@
 services:
   app:
     build: .
+    # Publish on host 3010 because 3000 is taken on the staging server. The
+    # app still listens on 3000 INSIDE the container — PORT env stays default.
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/middleware_db?schema=linear

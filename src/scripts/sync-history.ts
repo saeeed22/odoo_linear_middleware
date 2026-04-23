@@ -142,20 +142,26 @@ async function heuristicMatching(confidenceThreshold: number = 0.8) {
   logger.info({ confidenceThreshold }, 'Starting heuristic matching...');
 
   try {
-    // Fetch unmapped Linear issues
-    const linearIssues = await linearClient.team(process.env.LINEAR_TEAM_ID || '', {
-      issues: { first: 100 },
-    });
+    // v82 SDK dropped the 2nd-argument pre-pagination; fetch the team first,
+    // then request the first page of its issues via the connection fetcher.
+    const teamId = process.env.LINEAR_TEAM_ID;
+    if (!teamId) {
+      throw new Error('LINEAR_TEAM_ID env var is required for heuristic matching');
+    }
 
-    if (!linearIssues?.issues?.nodes) {
-      throw new Error('Failed to fetch Linear issues');
+    const team = await linearClient.team(teamId);
+    const issuesConnection = await team.issues({ first: 100 });
+    const linearIssueNodes = issuesConnection.nodes ?? [];
+
+    if (linearIssueNodes.length === 0) {
+      throw new Error('No Linear issues returned from the team — nothing to match against');
     }
 
     // Fetch unmapped Odoo tickets
     const odooTickets = await odooClient.searchTickets([], ['name', 'create_date', 'id'], 100);
 
     logger.info(
-      { linearCount: linearIssues.issues.nodes.length, odooCount: odooTickets.length },
+      { linearCount: linearIssueNodes.length, odooCount: odooTickets.length },
       'Fetched issues and tickets'
     );
 
@@ -166,7 +172,7 @@ async function heuristicMatching(confidenceThreshold: number = 0.8) {
     }> = [];
 
     // Compare each Linear issue with each Odoo ticket
-    for (const linearIssue of linearIssues.issues.nodes) {
+    for (const linearIssue of linearIssueNodes) {
       for (const odooTicket of odooTickets) {
         const score = calculateMatchScore(linearIssue, odooTicket);
 

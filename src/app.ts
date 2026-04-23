@@ -57,8 +57,9 @@ app.get('/health', async (req, res) => {
 
     // Check Linear
     try {
-      // Simple test: fetch current user (requires API key)
-      await linearClient.viewer();
+      // `viewer` is a getter that returns a LinearFetch<User>, not a method —
+      // awaiting the property performs the fetch.
+      await linearClient.viewer;
       health.linear = 'ok';
     } catch (err) {
       health.linear = 'error';
