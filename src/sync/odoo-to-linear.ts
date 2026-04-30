@@ -15,6 +15,7 @@ import { odooClient } from '../adapters/odoo-client';
 import { getStageName, getTagName } from '../config/odoo-metadata-cache';
 import { LINEAR_STATE_IDS } from '../config/linear-state-ids';
 import { LINEAR_LABEL_IDS } from '../config/linear-label-ids';
+import { consumeBotWriteFlag } from './bot-write.cache';
 
 const prisma = new PrismaClient();
 
@@ -48,6 +49,15 @@ export async function processOdooToLinear(data: any) {
   }
 
   logger.info({ odooId, eventId }, 'Idempotency check passed — proceeding with sync');
+
+  const isBotWrite = await consumeBotWriteFlag(odooId);
+  if (isBotWrite) {
+    logger.info({ odooId }, 'Skipping: Odoo ticket was written by bot (loop prevention)');
+    await prisma.idempotencyKey.create({
+      data: { event_key: eventId, source: 'odoo' }
+    }).catch(() => {});
+    return;
+  }
 
   const title = ticket.name || '';
   const htmlDescription = ticket.description || '';
@@ -83,11 +93,9 @@ export async function processOdooToLinear(data: any) {
         logger.warn({ odooStageName }, 'Odoo stage name not in ODOO_STAGE_MAP');
       }
 
-      // Resolve Linear state UUID from name — stateId is the correct Linear SDK field
-      const resolvedStateName = linearStateName ?? 'Todo';
-      const linearStateId = LINEAR_STATE_IDS[resolvedStateName];
-      if (!linearStateId) {
-        logger.warn({ resolvedStateName }, 'No Linear state ID found for state name');
+      const linearStateId = linearStateName ? (LINEAR_STATE_IDS[linearStateName] ?? null) : null;
+      if (linearStateName && !linearStateId) {
+        logger.warn({ linearStateName }, 'No Linear state ID found for state name');
       }
 
       const payload: any = {
@@ -193,10 +201,9 @@ export async function processOdooToLinear(data: any) {
         const odooStageName = odooStageId ? getStageName(odooStageId) : null;
         const linearStateName = odooStageName ? ODOO_STAGE_MAP[odooStageName] : null;
 
-        const resolvedStateName = linearStateName ?? 'Todo';
-        const linearStateId = LINEAR_STATE_IDS[resolvedStateName];
-        if (!linearStateId) {
-          logger.warn({ resolvedStateName }, 'No Linear state ID found for state name');
+        const linearStateId = linearStateName ? (LINEAR_STATE_IDS[linearStateName] ?? null) : null;
+        if (linearStateName && !linearStateId) {
+          logger.warn({ linearStateName }, 'No Linear state ID found for state name');
         }
 
         logger.info({ linearId: mapping.linear_id, stateId: linearStateId }, 'Sending update issue request to Linear API');
