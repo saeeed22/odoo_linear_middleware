@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { STATUS_MAP } from '../config/status-mapping';
 import { TAG_MAP } from '../config/tag-mapping';
 import { getStageId, getTagId } from '../config/odoo-metadata-cache';
+import { markBotWrite } from './bot-write.cache';
 
 const prisma = new PrismaClient();
 
@@ -93,7 +94,7 @@ export async function processLinearToOdoo(data: any) {
       const ticketData: any = {
         name: linearIssue.title,
         description: htmlDescription,
-        stage_id: stageId ?? null,
+        ...(stageId ? { stage_id: stageId } : {}),
       };
 
       // Add assignee if exists
@@ -137,6 +138,7 @@ export async function processLinearToOdoo(data: any) {
       }
 
       const odooTicketId = await odooClient.createTicket(ticketData);
+      await markBotWrite(odooTicketId);
 
       mapping = await prisma.ticketMapping.create({
         data: {
@@ -178,7 +180,7 @@ export async function processLinearToOdoo(data: any) {
       const updateData: any = {
         name: linearIssue.title,
         description: htmlDescription,
-        stage_id: stageId ?? null,
+        ...(stageId ? { stage_id: stageId } : {}),
       };
 
       // Update assignee
@@ -189,10 +191,9 @@ export async function processLinearToOdoo(data: any) {
         if (userMapping?.odoo_user_id) {
           updateData.user_id = userMapping.odoo_user_id;
         } else {
-          updateData.user_id = null; // Unassign if no mapping
           logger.warn(
             { linearEmail: linearIssue.assignee.email },
-            'No user mapping found, unassigning'
+            'No user mapping found for Linear assignee, leaving Odoo assignee unchanged'
           );
         }
       } else {
@@ -218,10 +219,15 @@ export async function processLinearToOdoo(data: any) {
             return tagId;
           })
           .filter((id: any) => id !== null);
-        
-        updateData.tag_ids = [[6, 0, tagIds]];
+
+        if (linearIssue.labels.nodes.length === 0) {
+          updateData.tag_ids = [[6, 0, []]];
+        } else if (tagIds.length > 0) {
+          updateData.tag_ids = [[6, 0, tagIds]];
+        }
       }
 
+      await markBotWrite(mapping.odoo_id);
       await odooClient.updateTicket(mapping.odoo_id, updateData);
 
       // Sync new comments
